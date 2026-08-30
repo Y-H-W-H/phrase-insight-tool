@@ -4,64 +4,96 @@ import { z } from "zod";
 const analyzeInput = z.object({
   selection: z.string().min(1).max(2000),
   sentence: z.string().max(4000).default(""),
-  context: z.string().max(6000).default(""),
+  prevSentence: z.string().max(4000).default(""),
+  nextSentence: z.string().max(4000).default(""),
+  context: z.string().max(8000).default(""),
   language: z.string().max(20).default("other"),
   bookTitle: z.string().max(300).default(""),
+  author: z.string().max(200).default(""),
+  uiLanguage: z.string().max(20).default("ru"),
+  kind: z.enum(["word", "phrase"]).default("word"),
 });
 
-const askInput = analyzeInput.extend({ question: z.string().min(1).max(1000) });
+const askInput = analyzeInput.extend({
+  question: z.string().min(1).max(1000),
+  priorAnalysis: z.string().max(12000).default(""),
+  history: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(6000) }))
+    .max(20)
+    .default([]),
+});
 
 const MODEL = "google/gemini-3.7-flash";
 const ENDPOINT = "https://ai.gateway.lovable.dev/v1/chat/completions";
 
-const schema = {
+const str = { type: "string" } as const;
+const pairArray = (a: string, b: string) =>
+  ({
+    type: "array",
+    items: {
+      type: "object",
+      additionalProperties: false,
+      required: [a, b],
+      properties: { [a]: str, [b]: str },
+    },
+  }) as const;
+
+const wordProps = {
+  translationContextual: str,
+  translationLiteral: str,
+  lemma: str,
+  pronunciation: str,
+  partOfSpeech: str,
+  morphology: str,
+  grammar: str,
+  meaning: str,
+  nuances: str,
+  wordChoice: str,
+  synonyms: pairArray("word", "difference"),
+  etymology: str,
+  wordFamily: pairArray("word", "gloss"),
+  collocations: { type: "array", items: str },
+  register: str,
+  examples: pairArray("text", "translation"),
+  context: str,
+  confidence: str,
+} as const;
+
+const phraseProps = {
+  translationContextual: str,
+  translationLiteral: str,
+  whatHappens: str,
+  syntax: str,
+  keyElements: pairArray("text", "note"),
+  styleWhy: str,
+  context: str,
+  meaning: str,
+  nuances: str,
+  examples: pairArray("text", "translation"),
+  confidence: str,
+} as const;
+
+const wordSchema = {
   type: "object",
   additionalProperties: false,
-  required: [
-    "translationLiteral",
-    "translationContextual",
-    "lemma",
-    "partOfSpeech",
-    "morphology",
-    "grammar",
-    "meaning",
-    "nuances",
-    "synonyms",
-    "etymology",
-    "context",
-    "examples",
-  ],
-  properties: {
-    translationLiteral: { type: "string" },
-    translationContextual: { type: "string" },
-    lemma: { type: "string" },
-    partOfSpeech: { type: "string" },
-    morphology: { type: "string" },
-    grammar: { type: "string" },
-    meaning: { type: "string" },
-    nuances: { type: "string" },
-    synonyms: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["word", "difference"],
-        properties: { word: { type: "string" }, difference: { type: "string" } },
-      },
-    },
-    etymology: { type: "string" },
-    context: { type: "string" },
-    examples: {
-      type: "array",
-      items: {
-        type: "object",
-        additionalProperties: false,
-        required: ["text", "translation"],
-        properties: { text: { type: "string" }, translation: { type: "string" } },
-      },
-    },
-  },
+  required: Object.keys(wordProps),
+  properties: wordProps,
 } as const;
+
+const phraseSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: Object.keys(phraseProps),
+  properties: phraseProps,
+} as const;
+
+const HONESTY = `Правила честности (обязательны):
+— Различай уровни знания: лингвистический факт, устоявшаяся этимология, интерпретация, гипотеза. Помечай их словами.
+— Никогда не выдумывай этимологию, цитаты, источники, исторические факты и значения.
+— Если не уверен — прямо напиши об этом в соответствующем поле и в поле confidence.
+— Лучше короткое «надёжных данных нет», чем красивая ложная справка.
+— Пустая строка допустима: раздел, который здесь нерелевантен, оставляй пустым, не заполняй искусственно.
+— Без эмодзи, без маркетингового тона, без литературоведческих фантазий.`;
 
 function gatewayError(status: number, message: string) {
   const map: Record<number, string> = {
@@ -96,6 +128,17 @@ async function callGateway(body: unknown) {
   return json.choices?.[0]?.message?.content ?? "";
 }
 
+function contextBlock(d: z.infer<typeof analyzeInput>) {
+  return `Язык текста (код): ${d.language}
+Источник: ${d.bookTitle || "неизвестен"}${d.author ? ` — ${d.author}` : ""}
+Предыдущее предложение: «${d.prevSentence}»
+Предложение с фрагментом: «${d.sentence}»
+Следующее предложение: «${d.nextSentence}»
+Окружающий абзац: «${d.context}»
+Разбираемый фрагмент: «${d.selection}»
+Язык твоих ответов и пояснений: ${d.uiLanguage === "ru" ? "русский" : d.uiLanguage}`;
+}
+
 export const aiAvailable = createServerFn({ method: "GET" }).handler(async () => {
   return { available: Boolean(process.env["LOVABLE_API_KEY"]) };
 });
@@ -103,28 +146,52 @@ export const aiAvailable = createServerFn({ method: "GET" }).handler(async () =>
 export const analyzeSelection = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => analyzeInput.parse(d))
   .handler(async ({ data }) => {
-    const prompt = `Ты — филолог-исследователь, помогающий в медленном close reading.
-Язык текста (код): ${data.language}. Источник: ${data.bookTitle || "неизвестен"}.
-Предложение: «${data.sentence}»
-Более широкий контекст: «${data.context}»
-Разбираемый фрагмент: «${data.selection}»
-
-Дай глубокий, точный, академичный разбор ИМЕННО этого фрагмента в этом контексте.
-Все пояснения пиши по-русски. Примеры — на языке оригинала с переводом.
-Если не уверен (особенно в этимологии), прямо оговори степень уверенности.
-Поле context заполняй только если исторический/культурный/литературный/предметный контекст действительно релевантен, иначе оставь пустую строку.
-Не используй эмодзи и маркетинговый тон. Будь конкретен, избегай воды.`;
+    const isWord = data.kind === "word";
+    const task = isWord
+      ? `Разбери ОДНО СЛОВО именно в этом контексте, а не изолированно.
+translationContextual — краткий естественный перевод именно здесь; если возможны другие переводы, объясни, почему выбран этот.
+translationLiteral — буквальный перевод, если он помогает; иначе пустая строка.
+lemma — словарная форма. pronunciation — IPA, если можешь надёжно.
+partOfSpeech и morphology — полный разбор именно этой формы, только применимые к языку категории (род, число, падеж, лицо, время, наклонение, вид, состояние и т. д.). Не перечисляй неприменимые поля.
+grammar — какую синтаксическую функцию слово выполняет в этом предложении.
+meaning — что слово значит здесь; nuances — оттенок, который оно добавляет.
+wordChoice — «почему именно это слово»: авторский выбор и как изменилось бы предложение с ближайшим аналогом. Это ключевой раздел.
+synonyms — 2–5 ближайших слов с contrastive explanation: чем каждое отличается и почему не взаимозаменяемо.
+etymology — только надёжное: происхождение, исторические формы, развитие значения; иначе честно об отсутствии данных.
+wordFamily — наиболее полезные однокоренные/производные слова с кратким глоссом.
+collocations — несколько характерных устойчивых сочетаний.
+register — neutral/formal/informal/literary/archaic/technical и т. п., если это существенно, иначе пусто.
+examples — 2–3 коротких естественных примера на языке оригинала с переводом, показывающих именно релевантное значение.
+context — историко-культурный/философский контекст только если он действительно нужен, иначе пустая строка.`
+      : `Разбери ФРАГМЕНТ как связное целое, не как одно слово.
+translationContextual — естественный перевод. translationLiteral — буквальный, если он помогает увидеть устройство оригинала, иначе пусто.
+whatHappens — кратко: что здесь происходит по смыслу в этом контексте.
+syntax — разбор структуры человеческим языком: главное и придаточные, связи, референции местоимений, времена, наклонения, необычный порядок слов.
+keyElements — несколько слов/конструкций, без понимания которых теряется смысл, с короткой пометкой.
+styleWhy — почему автор написал именно так: стилистический и семантический анализ без домыслов.
+meaning и nuances — при необходимости, иначе пусто. examples — только если действительно полезны, иначе пустой массив.
+context — исторический/культурный/философский/религиозный только там, где он реально нужен.`;
 
     const content = await callGateway({
       model: MODEL,
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        {
+          role: "system",
+          content: `Ты — филолог-исследователь, помогающий в медленном close reading оригинальных текстов. Твоя задача — объяснить не только «что это значит», но и «почему здесь написано именно так».\n${HONESTY}`,
+        },
+        { role: "user", content: `${contextBlock(data)}\n\n${task}` },
+      ],
       response_format: {
         type: "json_schema",
-        json_schema: { name: "analysis", strict: true, schema },
+        json_schema: {
+          name: isWord ? "word_analysis" : "phrase_analysis",
+          strict: true,
+          schema: isWord ? wordSchema : phraseSchema,
+        },
       },
     });
     const parsed = JSON.parse(content) as Record<string, unknown>;
-    return { ...parsed, source: "ai" as const };
+    return { ...parsed, kind: data.kind, source: "ai" as const };
   });
 
 export const askDeeper = createServerFn({ method: "POST" })
@@ -135,13 +202,16 @@ export const askDeeper = createServerFn({ method: "POST" })
       messages: [
         {
           role: "system",
-          content:
-            "Ты филолог-исследователь. Отвечай по-русски, точно, академично, без воды и эмодзи. Если не уверен — скажи об этом.",
+          content: `Ты филолог-исследователь и собеседник читателя. Отвечай кратко и точно, академично, без воды и эмодзи.\n${HONESTY}`,
         },
         {
           role: "user",
-          content: `Язык текста: ${data.language}. Предложение: «${data.sentence}». Контекст: «${data.context}». Фрагмент: «${data.selection}».\n\nВопрос: ${data.question}`,
+          content: `${contextBlock(data)}${
+            data.priorAnalysis ? `\n\nРанее выданный тобой разбор:\n${data.priorAnalysis}` : ""
+          }`,
         },
+        ...data.history,
+        { role: "user", content: data.question },
       ],
     });
     return { answer: content };
