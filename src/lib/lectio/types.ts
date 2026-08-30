@@ -1,6 +1,7 @@
 export type Book = {
   id: string;
   title: string;
+  author?: string;
   language: string;
   content: string;
   createdAt: number;
@@ -14,33 +15,71 @@ export type AnalysisSection = {
   body: string;
 };
 
+export type SynonymItem = { word: string; difference: string };
+export type ExampleItem = { text: string; translation: string };
+
 export type Analysis = {
   selection: string;
   sentence: string;
   language: string;
   source: "ai" | "demo";
+  kind: "word" | "phrase";
+
+  /* общее */
   translationLiteral: string;
   translationContextual: string;
-  lemma: string;
-  partOfSpeech: string;
-  morphology: string;
-  grammar: string;
   meaning: string;
   nuances: string;
-  synonyms: { word: string; difference: string }[];
-  etymology: string;
+  grammar: string;
   context: string;
-  examples: { text: string; translation: string }[];
+  examples: ExampleItem[];
+  synonyms: SynonymItem[];
+  etymology: string;
+  /** честная оценка надёжности: факт / устоявшееся / интерпретация / гипотеза */
+  confidence?: string;
+
+  /* слово */
+  lemma: string;
+  pronunciation?: string;
+  partOfSpeech: string;
+  morphology: string;
+  wordChoice?: string;
+  wordFamily?: { word: string; gloss: string }[];
+  collocations?: string[];
+  register?: string;
+
+  /* фрагмент */
+  whatHappens?: string;
+  syntax?: string;
+  keyElements?: { text: string; note: string }[];
+  styleWhy?: string;
+};
+
+export type VocabOccurrence = {
+  id: string;
+  selection: string;
+  sentence: string;
+  context?: string;
+  bookId?: string;
+  bookTitle: string;
+  author?: string;
+  translation: string;
+  createdAt: number;
 };
 
 export type VocabEntry = {
   id: string;
-  selection: string;
+  /** ключ записи: лемма (или сама форма, если леммы нет) */
   lemma: string;
+  selection: string;
   translation: string;
   language: string;
   sentence: string;
   bookTitle: string;
+  author?: string;
+  note?: string;
+  analysis?: Analysis;
+  occurrences: VocabOccurrence[];
   createdAt: number;
   updatedAt: number;
 };
@@ -49,7 +88,9 @@ export type HistoryItem = {
   id: string;
   selection: string;
   sentence: string;
+  context?: string;
   language: string;
+  kind?: "word" | "phrase";
   bookId: string;
   bookTitle: string;
   createdAt: number;
@@ -59,7 +100,8 @@ export type ReaderSettings = {
   fontSize: number;
   lineHeight: number;
   columnWidth: number;
-  theme: "light" | "dark";
+  theme: "light" | "dark" | "sepia";
+  markStudied: boolean;
 };
 
 export const defaultSettings: ReaderSettings = {
@@ -67,4 +109,5 @@ export const defaultSettings: ReaderSettings = {
   lineHeight: 1.75,
   columnWidth: 680,
   theme: "light",
+  markStudied: true,
 };
