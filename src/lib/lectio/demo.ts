@@ -10,7 +10,8 @@ Puis elle commençait à me devenir inintelligible, comme après la métempsycos
 
 export const demoBook: Book = {
   id: "demo-proust",
-  title: "Marcel Proust — Du côté de chez Swann (фрагмент)",
+  title: "Du côté de chez Swann (фрагмент)",
+  author: "Marcel Proust",
   language: "fr",
   content: demoText,
   createdAt: Date.now(),
@@ -23,6 +24,7 @@ function base(selection: string, sentence: string): Analysis {
     sentence,
     language: "fr",
     source: "demo",
+    kind: selection.trim().split(/\s+/).length > 1 ? "phrase" : "word",
     translationLiteral: "",
     translationContextual: "",
     lemma: "",
