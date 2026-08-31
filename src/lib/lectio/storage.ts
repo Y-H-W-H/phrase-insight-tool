@@ -257,11 +257,31 @@ export function getHistory(): HistoryItem[] {
   return read<HistoryItem[]>(KEYS.history, []);
 }
 
-export function pushHistory(item: Omit<HistoryItem, "id" | "createdAt">) {
+export function pushHistory(item: Omit<HistoryItem, "id" | "createdAt">): string {
   const all = getHistory().filter(
     (h) => !(h.selection === item.selection && h.bookId === item.bookId),
   );
-  write(KEYS.history, [{ ...item, id: uid(), createdAt: Date.now() }, ...all].slice(0, 30));
+  const id = uid();
+  write(KEYS.history, [{ ...item, id, createdAt: Date.now() }, ...all].slice(0, 60));
+  notify();
+  return id;
+}
+
+/** Дописывает готовый разбор в уже созданную запись истории. */
+export function attachHistoryAnalysis(id: string, analysis: Analysis) {
+  write(
+    KEYS.history,
+    getHistory().map((h) =>
+      h.id === id
+        ? {
+            ...h,
+            analysis,
+            kind: analysis.kind,
+            meaning: analysis.translationContextual || analysis.meaning || h.meaning,
+          }
+        : h,
+    ),
+  );
   notify();
 }
 
