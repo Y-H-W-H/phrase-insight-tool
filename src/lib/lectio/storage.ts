@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Book, HistoryItem, ReaderSettings, VocabEntry } from "./types";
+import type {
+  Analysis,
+  Book,
+  HistoryItem,
+  ReaderSettings,
+  VocabEntry,
+  VocabOccurrence,
+} from "./types";
 import { defaultSettings } from "./types";
 import { demoBook } from "./demo";
+import { normalizeForm } from "./text";
 
 const KEYS = {
   books: "lectio.books.v1",
