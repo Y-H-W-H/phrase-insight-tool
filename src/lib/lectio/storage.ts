@@ -80,20 +80,113 @@ export function updateBook(id: string, patch: Partial<Book>) {
 
 /* ---------- vocabulary ---------- */
 
-export function getVocab(): VocabEntry[] {
-  return read<VocabEntry[]>(KEYS.vocab, []);
+type LegacyVocab = Partial<VocabEntry> & {
+  id?: string;
+  selection?: string;
+  translation?: string;
+  language?: string;
+  sentence?: string;
+  bookTitle?: string;
+  createdAt?: number;
+};
+
+/** Миграция записей 0.1 → 0.2: достраивает lemma и occurrences, ничего не удаляя. */
+function migrateEntry(raw: LegacyVocab): VocabEntry {
+  const selection = raw.selection ?? "";
+  const createdAt = raw.createdAt ?? Date.now();
+  const lemma = raw.lemma && raw.lemma !== "—" ? raw.lemma : normalizeForm(selection) || selection;
+  const occurrences: VocabOccurrence[] =
+    raw.occurrences && raw.occurrences.length > 0
+      ? raw.occurrences
+      : [
+          {
+            id: uid(),
+            selection,
+            sentence: raw.sentence ?? "",
+            context: raw.analysis?.context,
+            bookTitle: raw.bookTitle ?? "",
+            author: raw.author,
+            translation: raw.translation ?? "",
+            createdAt,
+          },
+        ];
+  return {
+    id: raw.id ?? uid(),
+    lemma,
+    selection,
+    translation: raw.translation ?? "",
+    language: raw.language ?? "other",
+    sentence: raw.sentence ?? "",
+    bookTitle: raw.bookTitle ?? "",
+    author: raw.author,
+    note: raw.note,
+    analysis: raw.analysis,
+    occurrences,
+    createdAt,
+    updatedAt: raw.updatedAt ?? createdAt,
+  };
 }
 
-export function saveVocab(
-  entry: Omit<VocabEntry, "id" | "createdAt" | "updatedAt">,
-): "created" | "updated" {
+export function getVocab(): VocabEntry[] {
+  const raw = read<LegacyVocab[]>(KEYS.vocab, []);
+  const needsMigration = raw.some((e) => !e.occurrences || !e.lemma);
+  const list = raw.map(migrateEntry);
+  if (needsMigration && list.length > 0) write(KEYS.vocab, list);
+  return list;
+}
+
+export type VocabInput = {
+  selection: string;
+  lemma?: string;
+  translation: string;
+  language: string;
+  sentence: string;
+  context?: string;
+  bookId?: string;
+  bookTitle: string;
+  author?: string;
+  analysis?: Analysis;
+  note?: string;
+};
+
+function lemmaKey(input: { lemma?: string; selection: string }) {
+  const l = input.lemma && input.lemma !== "—" ? input.lemma : input.selection;
+  return normalizeForm(l);
+}
+
+export function saveVocab(input: VocabInput): "created" | "updated" {
   const all = getVocab();
-  const key = entry.selection.trim().toLowerCase();
+  const key = lemmaKey(input);
+  const now = Date.now();
+  const occurrence: VocabOccurrence = {
+    id: uid(),
+    selection: input.selection,
+    sentence: input.sentence,
+    context: input.context,
+    bookId: input.bookId,
+    bookTitle: input.bookTitle,
+    author: input.author,
+    translation: input.translation,
+    createdAt: now,
+  };
   const existing = all.find(
-    (e) => e.selection.trim().toLowerCase() === key && e.language === entry.language,
+    (e) => normalizeForm(e.lemma || e.selection) === key && e.language === input.language,
   );
   if (existing) {
-    const merged: VocabEntry = { ...existing, ...entry, updatedAt: Date.now() };
+    const already = existing.occurrences.some(
+      (o) =>
+        normalizeForm(o.selection) === normalizeForm(input.selection) &&
+        o.sentence.trim() === input.sentence.trim(),
+    );
+    const merged: VocabEntry = {
+      ...existing,
+      translation: input.translation || existing.translation,
+      analysis: input.analysis ?? existing.analysis,
+      author: input.author ?? existing.author,
+      note: input.note ?? existing.note,
+      occurrences: already ? existing.occurrences : [occurrence, ...existing.occurrences],
+      updatedAt: now,
+    };
     write(
       KEYS.vocab,
       all.map((e) => (e.id === existing.id ? merged : e)),
@@ -101,12 +194,45 @@ export function saveVocab(
     notify();
     return "updated";
   }
-  write(KEYS.vocab, [
-    { ...entry, id: uid(), createdAt: Date.now(), updatedAt: Date.now() },
-    ...all,
-  ]);
+  const entry: VocabEntry = {
+    id: uid(),
+    lemma: input.lemma && input.lemma !== "—" ? input.lemma : input.selection,
+    selection: input.selection,
+    translation: input.translation,
+    language: input.language,
+    sentence: input.sentence,
+    bookTitle: input.bookTitle,
+    author: input.author,
+    note: input.note,
+    analysis: input.analysis,
+    occurrences: [occurrence],
+    createdAt: now,
+    updatedAt: now,
+  };
+  write(KEYS.vocab, [entry, ...all]);
   notify();
   return "created";
+}
+
+export function setVocabNote(id: string, note: string) {
+  write(
+    KEYS.vocab,
+    getVocab().map((e) => (e.id === id ? { ...e, note, updatedAt: Date.now() } : e)),
+  );
+  notify();
+}
+
+/** Нормализованные формы и леммы всех сохранённых слов — для отметки изученного. */
+export function getStudiedForms(language?: string): Set<string> {
+  const set = new Set<string>();
+  for (const e of getVocab()) {
+    if (language && e.language !== language) continue;
+    if (e.lemma) set.add(normalizeForm(e.lemma));
+    set.add(normalizeForm(e.selection));
+    for (const o of e.occurrences) set.add(normalizeForm(o.selection));
+  }
+  set.delete("");
+  return set;
 }
 
 export function deleteVocab(id: string) {
