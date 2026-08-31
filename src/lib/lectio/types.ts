@@ -93,6 +93,11 @@ export type HistoryItem = {
   kind?: "word" | "phrase";
   bookId: string;
   bookTitle: string;
+  author?: string;
+  /** краткий контекстный смысл для списка истории */
+  meaning?: string;
+  /** сохранённый разбор, чтобы открыть его повторно без нового запроса */
+  analysis?: Analysis;
   createdAt: number;
 };
 
