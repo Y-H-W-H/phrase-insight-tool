@@ -37,6 +37,9 @@ function Reader() {
   const [settings] = useStore(getSettings);
   const [request, setRequest] = useState<AnalysisRequestInput | null>(null);
   const book = books.find((b) => b.id === bookId);
+  const studiedSelector = useCallback(() => getStudiedForms(book?.language), [book?.language]);
+  const [studied] = useStore(studiedSelector);
+
 
   useEffect(() => {
     if (!book) return;
