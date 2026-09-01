@@ -1,19 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ReaderView, type SelectionPayload } from "@/components/lectio/ReaderView";
 import { AnalysisPanel, type AnalysisRequestInput } from "@/components/lectio/AnalysisPanel";
 import {
   getBooks,
   getSettings,
+  getStudiedForms,
   setSettings,
   updateBook,
   useHydrated,
   useStore,
 } from "@/lib/lectio/storage";
+
 
 export const Route = createFileRoute("/reader/$bookId")({
   head: () => ({
