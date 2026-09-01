@@ -1,19 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ReaderView, type SelectionPayload } from "@/components/lectio/ReaderView";
 import { AnalysisPanel, type AnalysisRequestInput } from "@/components/lectio/AnalysisPanel";
 import {
   getBooks,
   getSettings,
+  getStudiedForms,
   setSettings,
   updateBook,
   useHydrated,
   useStore,
 } from "@/lib/lectio/storage";
+
 
 export const Route = createFileRoute("/reader/$bookId")({
   head: () => ({
@@ -34,6 +37,9 @@ function Reader() {
   const [settings] = useStore(getSettings);
   const [request, setRequest] = useState<AnalysisRequestInput | null>(null);
   const book = books.find((b) => b.id === bookId);
+  const studiedSelector = useCallback(() => getStudiedForms(book?.language), [book?.language]);
+  const [studied] = useStore(studiedSelector);
+
 
   useEffect(() => {
     if (!book) return;
@@ -120,15 +126,28 @@ function Reader() {
                 onValueChange={([v]) => setSettings({ ...settings, columnWidth: v! })}
               />
             </div>
-            <Button
-              variant="outline"
-              className="w-full"
-              onClick={() =>
-                setSettings({ ...settings, theme: settings.theme === "dark" ? "light" : "dark" })
-              }
-            >
-              {settings.theme === "dark" ? "Светлая тема" : "Тёмная тема"}
-            </Button>
+            <div>
+              <p className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">Тема</p>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(["light", "sepia", "dark"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    size="sm"
+                    variant={settings.theme === t ? "default" : "outline"}
+                    onClick={() => setSettings({ ...settings, theme: t })}
+                  >
+                    {t === "light" ? "Светлая" : t === "sepia" ? "Сепия" : "Тёмная"}
+                  </Button>
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center justify-between gap-3 text-sm">
+              <span>Отмечать изученные слова</span>
+              <Switch
+                checked={settings.markStudied}
+                onCheckedChange={(v) => setSettings({ ...settings, markStudied: v })}
+              />
+            </label>
           </PopoverContent>
         </Popover>
       </header>
@@ -138,6 +157,8 @@ function Reader() {
         fontSize={settings.fontSize}
         lineHeight={settings.lineHeight}
         columnWidth={settings.columnWidth}
+        studied={studied}
+        markStudied={settings.markStudied}
         onSelect={onSelect}
       />
 
@@ -145,3 +166,4 @@ function Reader() {
     </div>
   );
 }
+
