@@ -6,6 +6,8 @@ export function ThemeSync() {
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", settings.theme === "dark");
+    root.classList.toggle("sepia", settings.theme === "sepia");
+    root.dataset["theme"] = settings.theme;
   }, [settings.theme]);
   return null;
 }
