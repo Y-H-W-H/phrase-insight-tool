@@ -145,19 +145,19 @@ export function getVocab(): VocabEntry[] {
 
 export type VocabInput = {
   selection: string;
-  lemma?: string;
+  lemma?: string | undefined;
   translation: string;
   language: string;
   sentence: string;
-  context?: string;
-  bookId?: string;
+  context?: string | undefined;
+  bookId?: string | undefined;
   bookTitle: string;
-  author?: string;
-  analysis?: Analysis;
-  note?: string;
+  author?: string | undefined;
+  analysis?: Analysis | undefined;
+  note?: string | undefined;
 };
 
-function lemmaKey(input: { lemma?: string; selection: string }) {
+function lemmaKey(input: { lemma?: string | undefined; selection: string }) {
   const l = input.lemma && input.lemma !== "—" ? input.lemma : input.selection;
   return normalizeForm(l);
 }

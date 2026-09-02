@@ -1,12 +1,12 @@
 export type Book = {
   id: string;
   title: string;
-  author?: string;
+  author?: string | undefined;
   language: string;
   content: string;
   createdAt: number;
   progress: number; // 0..1
-  scrollTop?: number;
+  scrollTop?: number | undefined;
 };
 
 export type AnalysisSection = {
@@ -36,33 +36,33 @@ export type Analysis = {
   synonyms: SynonymItem[];
   etymology: string;
   /** честная оценка надёжности: факт / устоявшееся / интерпретация / гипотеза */
-  confidence?: string;
+  confidence?: string | undefined;
 
   /* слово */
   lemma: string;
-  pronunciation?: string;
+  pronunciation?: string | undefined;
   partOfSpeech: string;
   morphology: string;
-  wordChoice?: string;
-  wordFamily?: { word: string; gloss: string }[];
-  collocations?: string[];
-  register?: string;
+  wordChoice?: string | undefined;
+  wordFamily?: { word: string; gloss: string }[] | undefined;
+  collocations?: string[] | undefined;
+  register?: string | undefined;
 
   /* фрагмент */
-  whatHappens?: string;
-  syntax?: string;
-  keyElements?: { text: string; note: string }[];
-  styleWhy?: string;
+  whatHappens?: string | undefined;
+  syntax?: string | undefined;
+  keyElements?: { text: string; note: string }[] | undefined;
+  styleWhy?: string | undefined;
 };
 
 export type VocabOccurrence = {
   id: string;
   selection: string;
   sentence: string;
-  context?: string;
-  bookId?: string;
+  context?: string | undefined;
+  bookId?: string | undefined;
   bookTitle: string;
-  author?: string;
+  author?: string | undefined;
   translation: string;
   createdAt: number;
 };
@@ -76,9 +76,9 @@ export type VocabEntry = {
   language: string;
   sentence: string;
   bookTitle: string;
-  author?: string;
-  note?: string;
-  analysis?: Analysis;
+  author?: string | undefined;
+  note?: string | undefined;
+  analysis?: Analysis | undefined;
   occurrences: VocabOccurrence[];
   createdAt: number;
   updatedAt: number;
@@ -88,16 +88,16 @@ export type HistoryItem = {
   id: string;
   selection: string;
   sentence: string;
-  context?: string;
+  context?: string | undefined;
   language: string;
-  kind?: "word" | "phrase";
+  kind?: "word" | "phrase" | undefined;
   bookId: string;
   bookTitle: string;
-  author?: string;
+  author?: string | undefined;
   /** краткий контекстный смысл для списка истории */
-  meaning?: string;
+  meaning?: string | undefined;
   /** сохранённый разбор, чтобы открыть его повторно без нового запроса */
-  analysis?: Analysis;
+  analysis?: Analysis | undefined;
   createdAt: number;
 };
 

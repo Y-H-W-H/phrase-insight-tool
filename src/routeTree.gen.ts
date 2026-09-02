@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as HistoryRouteImport } from './routes/history'
 import { Route as VocabularyRouteImport } from './routes/vocabulary'
 import { Route as ReaderBookIdRouteImport } from './routes/reader.$bookId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HistoryRoute = HistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VocabularyRoute = VocabularyRouteImport.update({
@@ -31,30 +37,34 @@ const ReaderBookIdRoute = ReaderBookIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
   '/vocabulary': typeof VocabularyRoute
   '/reader/$bookId': typeof ReaderBookIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
   '/vocabulary': typeof VocabularyRoute
   '/reader/$bookId': typeof ReaderBookIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/history': typeof HistoryRoute
   '/vocabulary': typeof VocabularyRoute
   '/reader/$bookId': typeof ReaderBookIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/vocabulary' | '/reader/$bookId'
+  fullPaths: '/' | '/history' | '/vocabulary' | '/reader/$bookId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/vocabulary' | '/reader/$bookId'
-  id: '__root__' | '/' | '/vocabulary' | '/reader/$bookId'
+  to: '/' | '/history' | '/vocabulary' | '/reader/$bookId'
+  id: '__root__' | '/' | '/history' | '/vocabulary' | '/reader/$bookId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  HistoryRoute: typeof HistoryRoute
   VocabularyRoute: typeof VocabularyRoute
   ReaderBookIdRoute: typeof ReaderBookIdRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/history': {
+      id: '/history'
+      path: '/history'
+      fullPath: '/history'
+      preLoaderRoute: typeof HistoryRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/vocabulary': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  HistoryRoute: HistoryRoute,
   VocabularyRoute: VocabularyRoute,
   ReaderBookIdRoute: ReaderBookIdRoute,
 }

@@ -69,7 +69,13 @@ function Reader() {
     );
 
   const onSelect = (p: SelectionPayload) =>
-    setRequest({ ...p, language: book.language, bookId: book.id, bookTitle: book.title });
+    setRequest({
+      ...p,
+      language: book.language,
+      bookId: book.id,
+      bookTitle: book.title,
+      ...(book.author ? { author: book.author } : {}),
+    });
 
   return (
     <div className={request ? "md:mr-[26rem] lg:mr-[30rem]" : ""}>
