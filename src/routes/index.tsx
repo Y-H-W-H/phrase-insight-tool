@@ -87,8 +87,11 @@ function Library() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="ghost" asChild>
+            <Link to="/history">История</Link>
+          </Button>
           <Button variant="outline" asChild>
-            <Link to="/vocabulary">Словарь</Link>
+            <Link to="/vocabulary">Лексикон</Link>
           </Button>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
