@@ -206,9 +206,14 @@ function Library() {
 
       {hydrated && history.length > 0 && (
         <section className="mt-10">
-          <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Последние исследования
-          </h2>
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Последние исследования
+            </h2>
+            <Link to="/history" className="text-xs text-muted-foreground hover:underline">
+              вся история
+            </Link>
+          </div>
           <ul className="mt-3 space-y-1.5 text-sm">
             {history.slice(0, 10).map((h) => (
               <li key={h.id} className="flex flex-wrap gap-x-2 text-muted-foreground">
