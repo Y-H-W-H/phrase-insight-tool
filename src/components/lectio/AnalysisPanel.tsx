@@ -63,7 +63,7 @@ function has(v?: string) {
   return Boolean(v && v.trim() && v.trim() !== "—");
 }
 
-function Meta({ label, value }: { label: string; value?: string }) {
+function Meta({ label, value }: { label: string; value?: string | undefined }) {
   if (!has(value)) return null;
   return (
     <p className="text-sm">
