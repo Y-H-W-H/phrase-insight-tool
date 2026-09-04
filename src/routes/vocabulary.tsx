@@ -268,10 +268,9 @@ function Vocabulary() {
       )}
 
       <ul className="mt-4 divide-y divide-border border-y border-border">
-        {items.map((v) => (
-          <EntryCard key={v.id} v={v} />
-        ))}
+        {hydrated && items.map((v) => <EntryCard key={v.id} v={v} />)}
       </ul>
+
     </main>
   );
 }
