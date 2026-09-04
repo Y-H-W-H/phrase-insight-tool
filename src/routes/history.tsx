@@ -50,7 +50,8 @@ function History() {
       )}
 
       <ul className="mt-4 divide-y divide-border border-y border-border">
-        {history.map((h) => (
+        {hydrated && history.map((h) => (
+
           <li key={h.id}>
             <button
               type="button"
