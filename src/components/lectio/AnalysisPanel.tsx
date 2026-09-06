@@ -187,6 +187,127 @@ export function AnalysisPanel({
     );
   };
 
+  const addToResearch = async () => {
+    if (!analysis || extracting || researched) return;
+    setExtracting(true);
+    try {
+      const extraction = await requestResearchExtraction(
+        { ...request, kind },
+        analysisDigest(analysis),
+      );
+
+      // Всё собираем в памяти; записываем только после успешного извлечения.
+      const now = Date.now();
+      const sourceId = `book:${request.bookId}`;
+      const existingSource = findSourceById(sourceId);
+      const source: SourceRecord = existingSource ?? {
+        id: sourceId,
+        author: request.author ?? "",
+        title: request.bookTitle,
+        language: request.language,
+        type: "primary",
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const concepts: Concept[] = [];
+      const byName = new Map<string, Concept>();
+      for (const c of extraction.concepts) {
+        const existing = findConceptByName(c.name);
+        const concept: Concept = existing
+          ? {
+              ...existing,
+              aliases: [...new Set([...existing.aliases, ...c.aliases])],
+              description: existing.description || c.description,
+              updatedAt: now,
+            }
+          : {
+              id: researchUid(),
+              name: c.name,
+              aliases: c.aliases,
+              description: c.description,
+              relatedConceptIds: [],
+              associatedAuthors: request.author ? [{ name: request.author }] : [],
+              language: request.language,
+              createdAt: now,
+              updatedAt: now,
+            };
+        concepts.push(concept);
+        byName.set(c.name.trim().toLowerCase(), concept);
+        for (const a of concept.aliases) byName.set(a.trim().toLowerCase(), concept);
+      }
+
+      const claims: EvidenceClaim[] = extraction.claims.map((c) => ({
+        id: researchUid(),
+        claim: c.claim,
+        level: c.level,
+        confidence: c.confidence,
+        sources: [
+          {
+            sourceId: source.id,
+            ...(c.quote ? { quote: c.quote, quoteLanguage: request.language } : {}),
+          },
+        ],
+        language: request.language,
+        createdAt: now,
+        updatedAt: now,
+      }));
+
+      const weakest: EvidenceLevel =
+        claims.length > 0
+          ? claims.reduce((w, c) =>
+              EVIDENCE_LEVEL_STRENGTH[c.level] < EVIDENCE_LEVEL_STRENGTH[w.level] ? c : w,
+            ).level
+          : "hypothesis";
+      const relationLevel: EvidenceLevel =
+        EVIDENCE_LEVEL_STRENGTH[weakest] > EVIDENCE_LEVEL_STRENGTH["interpretation"]
+          ? "interpretation"
+          : weakest;
+
+      const relations: Relation[] = [];
+      for (const r of extraction.relations) {
+        const from = byName.get(r.fromName.trim().toLowerCase());
+        const to = byName.get(r.toName.trim().toLowerCase());
+        if (!from || !to || from.id === to.id) continue;
+        relations.push({
+          id: researchUid(),
+          from: { kind: "concept", id: from.id, label: from.name },
+          to: { kind: "concept", id: to.id, label: to.name },
+          kind: r.kind,
+          ...(r.note ? { note: r.note } : {}),
+          sourceIds: [source.id],
+          evidenceLevel: relationLevel,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      let enriched = attachSource(toEnrichedAnalysis(analysis), {
+        sourceId: source.id,
+        role: "supports",
+      });
+      for (const c of concepts) enriched = attachConcept(enriched, c);
+      for (const c of claims) enriched = attachClaim(enriched, c);
+
+      // Записи в хранилище — только сейчас.
+      saveSource(source);
+      concepts.forEach(saveConcept);
+      claims.forEach(saveEvidenceClaim);
+      relations.forEach(saveRelation);
+      saveEnrichedAnalysis(researchKeyRef.current ?? `sel:${request.bookId}:${request.selection}`, enriched);
+
+      setResearched(true);
+      toast.success(
+        `Добавлено в исследование: ${concepts.length} понятий, ${claims.length} утверждений`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось извлечь исследовательские данные");
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+
   const ask = async () => {
     const q = question.trim();
     if (!q || asking) return;
