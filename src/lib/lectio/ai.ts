@@ -1,6 +1,16 @@
 import type { Analysis } from "./types";
 import { findDemoAnalysis, demoFollowUp } from "./demo";
-import { analyzeSelection, askDeeper, aiAvailable } from "./analysis.functions";
+import {
+  analyzeSelection,
+  askDeeper,
+  aiAvailable,
+  extractResearchKnowledge,
+} from "./analysis.functions";
+import {
+  normalizeResearchExtraction,
+  type ResearchExtraction,
+} from "./core/knowledge-extraction";
+
 
 export type AnalysisRequest = {
   selection: string;
