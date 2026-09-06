@@ -141,3 +141,26 @@ export async function requestFollowUp(
     return { answer: demoFollowUp, source: "demo" };
   }
 }
+
+/**
+ * Явное извлечение исследовательских данных (Knowledge Extraction v0.1).
+ * Никаких демо-фолбэков: при недоступности AI бросаем понятную ошибку.
+ */
+export async function requestResearchExtraction(
+  req: AnalysisRequest,
+  priorAnalysis: string,
+): Promise<ResearchExtraction> {
+  try {
+    const raw = await extractResearchKnowledge({
+      data: { ...payload(req), priorAnalysis: priorAnalysis ?? "" },
+    });
+    return normalizeResearchExtraction(raw);
+  } catch (e) {
+    availability = false;
+    const message =
+      e instanceof Error && e.message && e.message !== "NO_AI"
+        ? e.message
+        : "AI не подключён — извлечение недоступно.";
+    throw new Error(message);
+  }
+}
