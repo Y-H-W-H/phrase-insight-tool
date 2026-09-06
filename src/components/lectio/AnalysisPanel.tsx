@@ -1,12 +1,41 @@
 import { useEffect, useRef, useState } from "react";
-import { Bookmark, ChevronDown, Loader2, Send, X } from "lucide-react";
+import { Bookmark, ChevronDown, FlaskConical, Loader2, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { analysisDigest, detectKind, requestAnalysis, requestFollowUp } from "@/lib/lectio/ai";
+import {
+  analysisDigest,
+  detectKind,
+  requestAnalysis,
+  requestFollowUp,
+  requestResearchExtraction,
+} from "@/lib/lectio/ai";
 import { attachHistoryAnalysis, pushHistory, saveVocab } from "@/lib/lectio/storage";
 import type { Analysis } from "@/lib/lectio/types";
 import { languageLabel } from "@/lib/lectio/languages";
+import type { Concept } from "@/lib/lectio/core/concepts";
+import type { EvidenceClaim, EvidenceLevel } from "@/lib/lectio/core/evidence";
+import { EVIDENCE_LEVEL_STRENGTH } from "@/lib/lectio/core/evidence";
+import type { Relation } from "@/lib/lectio/core/relations";
+import type { SourceRecord } from "@/lib/lectio/core/sources";
+import {
+  attachClaim,
+  attachConcept,
+  attachSource,
+  toEnrichedAnalysis,
+} from "@/lib/lectio/core/analysis-link";
+import {
+  findConceptByName,
+  findSourceById,
+  getEnrichedAnalysis,
+  researchUid,
+  saveConcept,
+  saveEnrichedAnalysis,
+  saveEvidenceClaim,
+  saveRelation,
+  saveSource,
+} from "@/lib/lectio/core/storage.research";
+
 
 export type AnalysisRequestInput = {
   selection: string;
@@ -86,6 +115,9 @@ export function AnalysisPanel({
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [asking, setAsking] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [researched, setResearched] = useState(false);
+  const researchKeyRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -95,13 +127,17 @@ export function AnalysisPanel({
     setNote(null);
     setMessages([]);
     setQuestion("");
+    setExtracting(false);
     scrollRef.current?.scrollTo({ top: 0 });
+    const kind = request.kind ?? detectKind(request.selection);
     if (request.initialAnalysis) {
+      const key = `sel:${request.bookId}:${request.selection}`;
+      researchKeyRef.current = key;
+      setResearched(Boolean(getEnrichedAnalysis(key)));
       setLoading(false);
       return;
     }
     setLoading(true);
-    const kind = request.kind ?? detectKind(request.selection);
     const historyId = pushHistory({
       selection: request.selection,
       sentence: request.sentence,
@@ -112,6 +148,8 @@ export function AnalysisPanel({
       bookTitle: request.bookTitle,
       author: request.author,
     });
+    researchKeyRef.current = historyId;
+    setResearched(Boolean(getEnrichedAnalysis(historyId)));
     requestAnalysis({ ...request, kind })
       .then((r) => {
         if (cancelled) return;
@@ -124,6 +162,7 @@ export function AnalysisPanel({
       cancelled = true;
     };
   }, [request]);
+
 
   if (!request) return null;
 
@@ -147,6 +186,127 @@ export function AnalysisPanel({
       res === "created" ? "Сохранено в словарь" : "Добавлена новая встреча в словаре",
     );
   };
+
+  const addToResearch = async () => {
+    if (!analysis || extracting || researched) return;
+    setExtracting(true);
+    try {
+      const extraction = await requestResearchExtraction(
+        { ...request, kind },
+        analysisDigest(analysis),
+      );
+
+      // Всё собираем в памяти; записываем только после успешного извлечения.
+      const now = Date.now();
+      const sourceId = `book:${request.bookId}`;
+      const existingSource = findSourceById(sourceId);
+      const source: SourceRecord = existingSource ?? {
+        id: sourceId,
+        author: request.author ?? "",
+        title: request.bookTitle,
+        language: request.language,
+        type: "primary",
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const concepts: Concept[] = [];
+      const byName = new Map<string, Concept>();
+      for (const c of extraction.concepts) {
+        const existing = findConceptByName(c.name);
+        const concept: Concept = existing
+          ? {
+              ...existing,
+              aliases: [...new Set([...existing.aliases, ...c.aliases])],
+              description: existing.description || c.description,
+              updatedAt: now,
+            }
+          : {
+              id: researchUid(),
+              name: c.name,
+              aliases: c.aliases,
+              description: c.description,
+              relatedConceptIds: [],
+              associatedAuthors: request.author ? [{ name: request.author }] : [],
+              language: request.language,
+              createdAt: now,
+              updatedAt: now,
+            };
+        concepts.push(concept);
+        byName.set(c.name.trim().toLowerCase(), concept);
+        for (const a of concept.aliases) byName.set(a.trim().toLowerCase(), concept);
+      }
+
+      const claims: EvidenceClaim[] = extraction.claims.map((c) => ({
+        id: researchUid(),
+        claim: c.claim,
+        level: c.level,
+        confidence: c.confidence,
+        sources: [
+          {
+            sourceId: source.id,
+            ...(c.quote ? { quote: c.quote, quoteLanguage: request.language } : {}),
+          },
+        ],
+        language: request.language,
+        createdAt: now,
+        updatedAt: now,
+      }));
+
+      const weakest: EvidenceLevel =
+        claims.length > 0
+          ? claims.reduce((w, c) =>
+              EVIDENCE_LEVEL_STRENGTH[c.level] < EVIDENCE_LEVEL_STRENGTH[w.level] ? c : w,
+            ).level
+          : "hypothesis";
+      const relationLevel: EvidenceLevel =
+        EVIDENCE_LEVEL_STRENGTH[weakest] > EVIDENCE_LEVEL_STRENGTH["interpretation"]
+          ? "interpretation"
+          : weakest;
+
+      const relations: Relation[] = [];
+      for (const r of extraction.relations) {
+        const from = byName.get(r.fromName.trim().toLowerCase());
+        const to = byName.get(r.toName.trim().toLowerCase());
+        if (!from || !to || from.id === to.id) continue;
+        relations.push({
+          id: researchUid(),
+          from: { kind: "concept", id: from.id, label: from.name },
+          to: { kind: "concept", id: to.id, label: to.name },
+          kind: r.kind,
+          ...(r.note ? { note: r.note } : {}),
+          sourceIds: [source.id],
+          evidenceLevel: relationLevel,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      let enriched = attachSource(toEnrichedAnalysis(analysis), {
+        sourceId: source.id,
+        role: "supports",
+      });
+      for (const c of concepts) enriched = attachConcept(enriched, c);
+      for (const c of claims) enriched = attachClaim(enriched, c);
+
+      // Записи в хранилище — только сейчас.
+      saveSource(source);
+      concepts.forEach(saveConcept);
+      claims.forEach(saveEvidenceClaim);
+      relations.forEach(saveRelation);
+      saveEnrichedAnalysis(researchKeyRef.current ?? `sel:${request.bookId}:${request.selection}`, enriched);
+
+      setResearched(true);
+      toast.success(
+        `Добавлено в исследование: ${concepts.length} понятий, ${claims.length} утверждений`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Не удалось извлечь исследовательские данные");
+    } finally {
+      setExtracting(false);
+    }
+  };
+
 
   const ask = async () => {
     const q = question.trim();
@@ -375,12 +535,26 @@ export function AnalysisPanel({
               </div>
             )}
 
-            <div className="mt-5">
+            <div className="mt-5 space-y-2">
               <Button variant="outline" className="w-full" onClick={save}>
                 <Bookmark className="mr-1.5 h-4 w-4" />
                 {isWord ? "Сохранить слово" : "Сохранить фрагмент"}
               </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                disabled={extracting || researched}
+                onClick={() => void addToResearch()}
+              >
+                {extracting ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <FlaskConical className="mr-1.5 h-4 w-4" />
+                )}
+                {extracting ? "Извлекаю…" : researched ? "В исследовании" : "Добавить в исследование"}
+              </Button>
             </div>
+
 
             <div className="mt-6 border-t border-border pt-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">

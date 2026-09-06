@@ -194,7 +194,141 @@ context — исторический/культурный/философский
     return { ...parsed, kind: data.kind, source: "ai" as const };
   });
 
+const extractInput = analyzeInput.extend({
+  priorAnalysis: z.string().max(12000).default(""),
+});
+
+const num = { type: "number" } as const;
+const strArray = { type: "array", items: str } as const;
+
+const extractionSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["concepts", "claims", "relations", "note"],
+  properties: {
+    concepts: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["name", "aliases", "description", "confidence"],
+        properties: { name: str, aliases: strArray, description: str, confidence: num },
+      },
+    },
+    claims: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["claim", "level", "confidence", "quote"],
+        properties: {
+          claim: str,
+          level: {
+            type: "string",
+            enum: [
+              "direct_quote",
+              "author_statement",
+              "scholarly_consensus",
+              "interpretation",
+              "hypothesis",
+            ],
+          },
+          confidence: num,
+          quote: str,
+        },
+      },
+    },
+    relations: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["fromName", "toName", "kind", "note", "confidence"],
+        properties: {
+          fromName: str,
+          toName: str,
+          kind: {
+            type: "string",
+            enum: [
+              "derives_from",
+              "influenced",
+              "responds_to",
+              "opposes",
+              "exemplifies",
+              "defines",
+              "discusses",
+              "translates",
+              "part_of",
+              "synonym_of",
+              "other",
+            ],
+          },
+          note: str,
+          confidence: num,
+        },
+      },
+    },
+    note: str,
+  },
+} as const;
+
+const EXTRACTION_RULES = `Ты извлекаешь исследовательские данные СТРОГО из предоставленного материала: выделенный фрагмент, окружающие предложения, абзац и уже выданный разбор.
+— Запрещено использовать внешние знания об истории идей, влияниях, генеалогии концептов и научной литературе. В версии 0.1 извлекается только то, что подтверждается предоставленным текстом.
+— Уровни утверждений: direct_quote (дословная короткая цитата, скопированная из предоставленного текста без изменений), author_statement (прямое высказывание автора в этом тексте), scholarly_consensus (только если консенсус буквально изложен в предоставленном материале — обычно НЕ используй), interpretation (обоснованная интерпретация этого фрагмента), hypothesis (осторожное предположение).
+— Утверждение с level=direct_quote ОБЯЗАНО содержать точную короткую цитату в поле quote, скопированную из предоставленного текста. Если точной цитаты нет — используй другой уровень и оставь quote пустым.
+— Никогда не выдумывай цитаты, страницы, издания, библиографические сведения и внешние источники.
+— Связи (relations) добавляй только если сам фрагмент/контекст их подтверждает; иначе пустой массив.
+— Пустые массивы предпочтительнее домыслов. confidence — число от 0 до 1.
+— note — короткая пометка о том, чего материал не позволяет утверждать; допустимо пустое поле.`;
+
+export const extractResearchKnowledge = createServerFn({ method: "POST" })
+  .inputValidator((d: unknown) => extractInput.parse(d))
+  .handler(async ({ data }) => {
+    const content = await callGateway({
+      model: MODEL,
+      messages: [
+        {
+          role: "system",
+          content: `Ты — исследователь-филолог, готовящий source-grounded исследовательскую карточку.\n${EXTRACTION_RULES}\n${HONESTY}`,
+        },
+        {
+          role: "user",
+          content: `${contextBlock(data)}${
+            data.priorAnalysis ? `\n\nУже выданный разбор:\n${data.priorAnalysis}` : ""
+          }\n\nИзвлеки понятия (concepts), проверяемые утверждения (claims) и связи (relations) строго из этого материала.`,
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "research_extraction",
+          strict: true,
+          schema: extractionSchema,
+        },
+      },
+    });
+    const parsed = JSON.parse(content) as {
+      concepts?: { name: string; aliases: string[]; description: string; confidence: number }[];
+      claims?: { claim: string; level: string; confidence: number; quote: string }[];
+      relations?: {
+        fromName: string;
+        toName: string;
+        kind: string;
+        note: string;
+        confidence: number;
+      }[];
+      note?: string;
+    };
+    return {
+      concepts: parsed.concepts ?? [],
+      claims: parsed.claims ?? [],
+      relations: parsed.relations ?? [],
+      note: parsed.note ?? "",
+    };
+  });
+
 export const askDeeper = createServerFn({ method: "POST" })
+
   .inputValidator((d: unknown) => askInput.parse(d))
   .handler(async ({ data }) => {
     const content = await callGateway({

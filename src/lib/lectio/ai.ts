@@ -1,6 +1,16 @@
 import type { Analysis } from "./types";
 import { findDemoAnalysis, demoFollowUp } from "./demo";
-import { analyzeSelection, askDeeper, aiAvailable } from "./analysis.functions";
+import {
+  analyzeSelection,
+  askDeeper,
+  aiAvailable,
+  extractResearchKnowledge,
+} from "./analysis.functions";
+import {
+  normalizeResearchExtraction,
+  type ResearchExtraction,
+} from "./core/knowledge-extraction";
+
 
 export type AnalysisRequest = {
   selection: string;
@@ -129,5 +139,28 @@ export async function requestFollowUp(
     return { answer: r.answer, source: "ai" };
   } catch {
     return { answer: demoFollowUp, source: "demo" };
+  }
+}
+
+/**
+ * Явное извлечение исследовательских данных (Knowledge Extraction v0.1).
+ * Никаких демо-фолбэков: при недоступности AI бросаем понятную ошибку.
+ */
+export async function requestResearchExtraction(
+  req: AnalysisRequest,
+  priorAnalysis: string,
+): Promise<ResearchExtraction> {
+  try {
+    const raw = await extractResearchKnowledge({
+      data: { ...payload(req), priorAnalysis: priorAnalysis ?? "" },
+    });
+    return normalizeResearchExtraction(raw);
+  } catch (e) {
+    availability = false;
+    const message =
+      e instanceof Error && e.message && e.message !== "NO_AI"
+        ? e.message
+        : "AI не подключён — извлечение недоступно.";
+    throw new Error(message);
   }
 }
