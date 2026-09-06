@@ -1,12 +1,41 @@
 import { useEffect, useRef, useState } from "react";
-import { Bookmark, ChevronDown, Loader2, Send, X } from "lucide-react";
+import { Bookmark, ChevronDown, FlaskConical, Loader2, Send, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { analysisDigest, detectKind, requestAnalysis, requestFollowUp } from "@/lib/lectio/ai";
+import {
+  analysisDigest,
+  detectKind,
+  requestAnalysis,
+  requestFollowUp,
+  requestResearchExtraction,
+} from "@/lib/lectio/ai";
 import { attachHistoryAnalysis, pushHistory, saveVocab } from "@/lib/lectio/storage";
 import type { Analysis } from "@/lib/lectio/types";
 import { languageLabel } from "@/lib/lectio/languages";
+import type { Concept } from "@/lib/lectio/core/concepts";
+import type { EvidenceClaim, EvidenceLevel } from "@/lib/lectio/core/evidence";
+import { EVIDENCE_LEVEL_STRENGTH } from "@/lib/lectio/core/evidence";
+import type { Relation } from "@/lib/lectio/core/relations";
+import type { SourceRecord } from "@/lib/lectio/core/sources";
+import {
+  attachClaim,
+  attachConcept,
+  attachSource,
+  toEnrichedAnalysis,
+} from "@/lib/lectio/core/analysis-link";
+import {
+  findConceptByName,
+  findSourceById,
+  getEnrichedAnalysis,
+  researchUid,
+  saveConcept,
+  saveEnrichedAnalysis,
+  saveEvidenceClaim,
+  saveRelation,
+  saveSource,
+} from "@/lib/lectio/core/storage.research";
+
 
 export type AnalysisRequestInput = {
   selection: string;
