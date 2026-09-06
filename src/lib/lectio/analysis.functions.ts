@@ -307,7 +307,24 @@ export const extractResearchKnowledge = createServerFn({ method: "POST" })
         },
       },
     });
-    return JSON.parse(content) as Record<string, unknown>;
+    const parsed = JSON.parse(content) as {
+      concepts?: { name: string; aliases: string[]; description: string; confidence: number }[];
+      claims?: { claim: string; level: string; confidence: number; quote: string }[];
+      relations?: {
+        fromName: string;
+        toName: string;
+        kind: string;
+        note: string;
+        confidence: number;
+      }[];
+      note?: string;
+    };
+    return {
+      concepts: parsed.concepts ?? [],
+      claims: parsed.claims ?? [],
+      relations: parsed.relations ?? [],
+      note: parsed.note ?? "",
+    };
   });
 
 export const askDeeper = createServerFn({ method: "POST" })
