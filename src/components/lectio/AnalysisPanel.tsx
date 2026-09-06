@@ -535,12 +535,26 @@ export function AnalysisPanel({
               </div>
             )}
 
-            <div className="mt-5">
+            <div className="mt-5 space-y-2">
               <Button variant="outline" className="w-full" onClick={save}>
                 <Bookmark className="mr-1.5 h-4 w-4" />
                 {isWord ? "Сохранить слово" : "Сохранить фрагмент"}
               </Button>
+              <Button
+                variant="ghost"
+                className="w-full"
+                disabled={extracting || researched}
+                onClick={() => void addToResearch()}
+              >
+                {extracting ? (
+                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                ) : (
+                  <FlaskConical className="mr-1.5 h-4 w-4" />
+                )}
+                {extracting ? "Извлекаю…" : researched ? "В исследовании" : "Добавить в исследование"}
+              </Button>
             </div>
+
 
             <div className="mt-6 border-t border-border pt-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
