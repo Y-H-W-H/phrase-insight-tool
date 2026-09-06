@@ -115,6 +115,9 @@ export function AnalysisPanel({
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [asking, setAsking] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [researched, setResearched] = useState(false);
+  const researchKeyRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -124,13 +127,17 @@ export function AnalysisPanel({
     setNote(null);
     setMessages([]);
     setQuestion("");
+    setExtracting(false);
     scrollRef.current?.scrollTo({ top: 0 });
+    const kind = request.kind ?? detectKind(request.selection);
     if (request.initialAnalysis) {
+      const key = `sel:${request.bookId}:${request.selection}`;
+      researchKeyRef.current = key;
+      setResearched(Boolean(getEnrichedAnalysis(key)));
       setLoading(false);
       return;
     }
     setLoading(true);
-    const kind = request.kind ?? detectKind(request.selection);
     const historyId = pushHistory({
       selection: request.selection,
       sentence: request.sentence,
@@ -141,6 +148,8 @@ export function AnalysisPanel({
       bookTitle: request.bookTitle,
       author: request.author,
     });
+    researchKeyRef.current = historyId;
+    setResearched(Boolean(getEnrichedAnalysis(historyId)));
     requestAnalysis({ ...request, kind })
       .then((r) => {
         if (cancelled) return;
@@ -153,6 +162,7 @@ export function AnalysisPanel({
       cancelled = true;
     };
   }, [request]);
+
 
   if (!request) return null;
 
