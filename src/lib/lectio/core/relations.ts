@@ -41,6 +41,8 @@ export type Relation = {
   period?: string | undefined;
   /** источники, подтверждающие связь (id SourceRecord) */
   sourceIds?: string[] | undefined;
+  /** конкретные утверждения (id EvidenceClaim), обосновывающие связь */
+  supportingClaimIds?: string[] | undefined;
   /** уровень обоснованности связи — совместим с evidence.ts */
   evidenceLevel?: EvidenceLevel | undefined;
   createdAt: number;
