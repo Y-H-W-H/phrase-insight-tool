@@ -25,6 +25,11 @@ import {
   toEnrichedAnalysis,
 } from "@/lib/lectio/core/analysis-link";
 import {
+  legacyResearchRecordKey,
+  researchRecordKey,
+  weakestSupportingLevel,
+} from "@/lib/lectio/core/knowledge-extraction";
+import {
   findConceptByName,
   findSourceById,
   getEnrichedAnalysis,
@@ -34,7 +39,12 @@ import {
   saveEvidenceClaim,
   saveRelation,
   saveSource,
-} from "@/lib/lectio/core/storage.research";
+} from "@/lib/lectio/research";
+
+/** Есть ли уже запись исследования под новым ключом или под ключами v0.1. */
+function findExistingResearch(keys: string[]): boolean {
+  return keys.some((k) => Boolean(k && getEnrichedAnalysis(k)));
+}
 
 
 export type AnalysisRequestInput = {
@@ -130,10 +140,19 @@ export function AnalysisPanel({
     setExtracting(false);
     scrollRef.current?.scrollTo({ top: 0 });
     const kind = request.kind ?? detectKind(request.selection);
+    // v0.1.1: стабильный ключ bookId + selection + sentence; старые ключи только читаем.
+    const key = researchRecordKey({
+      bookId: request.bookId,
+      selection: request.selection,
+      sentence: request.sentence,
+    });
+    const legacyKey = legacyResearchRecordKey({
+      bookId: request.bookId,
+      selection: request.selection,
+    });
+    researchKeyRef.current = key;
     if (request.initialAnalysis) {
-      const key = `sel:${request.bookId}:${request.selection}`;
-      researchKeyRef.current = key;
-      setResearched(Boolean(getEnrichedAnalysis(key)));
+      setResearched(findExistingResearch([key, legacyKey]));
       setLoading(false);
       return;
     }
@@ -148,8 +167,7 @@ export function AnalysisPanel({
       bookTitle: request.bookTitle,
       author: request.author,
     });
-    researchKeyRef.current = historyId;
-    setResearched(Boolean(getEnrichedAnalysis(historyId)));
+    setResearched(findExistingResearch([key, historyId, legacyKey]));
     requestAnalysis({ ...request, kind })
       .then((r) => {
         if (cancelled) return;
@@ -253,22 +271,23 @@ export function AnalysisPanel({
         updatedAt: now,
       }));
 
-      const weakest: EvidenceLevel =
-        claims.length > 0
-          ? claims.reduce((w, c) =>
-              EVIDENCE_LEVEL_STRENGTH[c.level] < EVIDENCE_LEVEL_STRENGTH[w.level] ? c : w,
-            ).level
-          : "hypothesis";
-      const relationLevel: EvidenceLevel =
-        EVIDENCE_LEVEL_STRENGTH[weakest] > EVIDENCE_LEVEL_STRENGTH["interpretation"]
-          ? "interpretation"
-          : weakest;
-
+      // Связь опирается на конкретные supporting claims этого извлечения (по индексу),
+      // а не на общий weakest level всего extraction. Уровень связи — не сильнее
+      // самого слабого из её claims и не сильнее interpretation.
       const relations: Relation[] = [];
       for (const r of extraction.relations) {
         const from = byName.get(r.fromName.trim().toLowerCase());
         const to = byName.get(r.toName.trim().toLowerCase());
         if (!from || !to || from.id === to.id) continue;
+        const supportingClaimIds = r.supportingClaims
+          .map((i) => claims[i]?.id)
+          .filter((id): id is string => Boolean(id));
+        if (supportingClaimIds.length === 0) continue;
+        const weakest = weakestSupportingLevel(r, extraction.claims);
+        const evidenceLevel: EvidenceLevel =
+          EVIDENCE_LEVEL_STRENGTH[weakest] > EVIDENCE_LEVEL_STRENGTH["interpretation"]
+            ? "interpretation"
+            : weakest;
         relations.push({
           id: researchUid(),
           from: { kind: "concept", id: from.id, label: from.name },
@@ -276,7 +295,8 @@ export function AnalysisPanel({
           kind: r.kind,
           ...(r.note ? { note: r.note } : {}),
           sourceIds: [source.id],
-          evidenceLevel: relationLevel,
+          supportingClaimIds,
+          evidenceLevel,
           createdAt: now,
           updatedAt: now,
         });
@@ -294,7 +314,15 @@ export function AnalysisPanel({
       concepts.forEach(saveConcept);
       claims.forEach(saveEvidenceClaim);
       relations.forEach(saveRelation);
-      saveEnrichedAnalysis(researchKeyRef.current ?? `sel:${request.bookId}:${request.selection}`, enriched);
+      saveEnrichedAnalysis(
+        researchKeyRef.current ??
+          researchRecordKey({
+            bookId: request.bookId,
+            selection: request.selection,
+            sentence: request.sentence,
+          }),
+        enriched,
+      );
 
       setResearched(true);
       toast.success(

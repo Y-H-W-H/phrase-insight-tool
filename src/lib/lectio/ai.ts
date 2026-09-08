@@ -143,18 +143,29 @@ export async function requestFollowUp(
 }
 
 /**
- * Явное извлечение исследовательских данных (Knowledge Extraction v0.1).
+ * Явное извлечение исследовательских данных (Knowledge Extraction v0.1.1).
  * Никаких демо-фолбэков: при недоступности AI бросаем понятную ошибку.
+ * Цитаты проверяются на буквальное вхождение в переданный материал.
  */
 export async function requestResearchExtraction(
   req: AnalysisRequest,
   priorAnalysis: string,
 ): Promise<ResearchExtraction> {
   try {
+    const p = payload(req);
     const raw = await extractResearchKnowledge({
-      data: { ...payload(req), priorAnalysis: priorAnalysis ?? "" },
+      data: { ...p, priorAnalysis: priorAnalysis ?? "" },
     });
-    return normalizeResearchExtraction(raw);
+    return normalizeResearchExtraction(raw, {
+      material: {
+        selection: p.selection,
+        sentence: p.sentence,
+        prevSentence: p.prevSentence,
+        nextSentence: p.nextSentence,
+        context: p.context,
+      },
+      allowScholarlyConsensus: false,
+    });
   } catch (e) {
     availability = false;
     const message =

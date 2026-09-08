@@ -317,6 +317,7 @@ export const extractResearchKnowledge = createServerFn({ method: "POST" })
         kind: string;
         note: string;
         confidence: number;
+        supportingClaims: number[];
       }[];
       note?: string;
     };
