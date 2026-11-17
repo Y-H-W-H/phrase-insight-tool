@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
 import { LANGUAGES, languageLabel } from "@/lib/lectio/languages";
 import { addBook, deleteBook, getBooks, getHistory, useHydrated, useStore } from "@/lib/lectio/storage";
 
@@ -60,20 +61,38 @@ function Library() {
   const [title, setTitle] = useState("");
   const [language, setLanguage] = useState("fr");
   const [content, setContent] = useState("");
+  const [author, setAuthor] = useState<string | undefined>();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const create = () => {
     if (!content.trim()) return;
-    const book = addBook({ title, language, content });
+    const book = addBook({ title, language, content, author });
     setOpen(false);
     setTitle("");
     setContent("");
+    setAuthor(undefined);
     router.navigate({ to: "/reader/$bookId", params: { bookId: book.id } });
   };
 
   const onFile = async (file: File) => {
+    if (/\.epub$/i.test(file.name)) {
+      try {
+        const { parseEpub } = await import("@/lib/lectio/epub");
+        const r = await parseEpub(file);
+        setContent(r.content);
+        setTitle(r.title || file.name.replace(/\.epub$/i, ""));
+        setAuthor(r.author);
+        const code = r.language?.split("-")[0];
+        if (code && LANGUAGES.some((l) => l.code === code)) setLanguage(code);
+        toast.success("EPUB загружен");
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Не удалось прочитать EPUB");
+      }
+      return;
+    }
     const text = await file.text();
     setContent(text);
+    setAuthor(undefined);
     if (!title) setTitle(file.name.replace(/\.txt$/i, ""));
   };
 
@@ -130,11 +149,12 @@ function Library() {
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".txt,text/plain"
+                  accept=".txt,.epub,text/plain,application/epub+zip"
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) void onFile(f);
+                    e.target.value = "";
                   }}
                 />
                 <div className="flex justify-between gap-2">

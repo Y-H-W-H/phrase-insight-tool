@@ -65,12 +65,13 @@ export function saveBooks(books: Book[]) {
   notify();
 }
 
-export function addBook(input: { title: string; language: string; content: string }): Book {
+export function addBook(input: { title: string; language: string; content: string; author?: string | undefined }): Book {
   const book: Book = {
     id: uid(),
     title: input.title.trim() || "Без названия",
     language: input.language,
     content: input.content,
+    author: input.author?.trim() || undefined,
     createdAt: Date.now(),
     progress: 0,
   };
